@@ -151,7 +151,6 @@ class Application(QMainWindow):
     def atnaujintiSablona(self):
         try:
 
-
         except Exception as e:
         print(e)
 
