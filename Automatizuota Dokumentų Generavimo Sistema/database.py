@@ -1,5 +1,6 @@
 import psycopg2
 import openpyxl
+from PyQt5.QtWidgets import QMessageBox
 
 def create_table_saskaitu_duomenys(conn_params):
     # susikuriame duomenu baze jeigu dar nebuvo sukurta su visais stulpeliais saskaitoms
@@ -34,25 +35,23 @@ def create_table_saskaitu_duomenys(conn_params):
     cur.close()
     conn.close()
 
-def read_excel(file_path):
+def read_excel(file_path, conn_params):
     # pagal gauta failo kelia atsidarome ta excel faila ir sheet ir pasiemame duomenys pagal eilute
     workbook = openpyxl.load_workbook(file_path)
     sheet = workbook.active
     data = []
     for row in sheet.iter_rows(values_only=True):
         data.append(row)
-    return data
+    insert_data_saskaitos(data, conn_params)
 
-def insert_data_saskaitos(failo_kelias, conn_params):
-    data = read_excel(failo_kelias)
-    # print(data)
+def insert_data_saskaitos(data, conn_params):
     conn = psycopg2.connect(**conn_params)
     cur = conn.cursor()
     insert_query = """
             insert into sf_duomenys(
+            data,
             serija,
             numeris,
-            data,
             pardavejo_imone,
             pardavejo_adresas,
             pardavejo_kodas,
@@ -71,8 +70,33 @@ def insert_data_saskaitos(failo_kelias, conn_params):
             suma
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
-    for row in data[1:]:
-        cur.execute(insert_query, row)
+    check_query = "SELECT numeris FROM sf_duomenys"
+    cur.execute(check_query)
+    numeriu_list = [row[0] for row in cur.fetchall()]
+    print(numeriu_list)
+    if data[0][0] == "data":
+        for row in data[1:]:
+            # print(row[2])
+            if not str(row[2]) in numeriu_list:
+                print(row[2])
+                cur.execute(insert_query, row)
+    else:
+        for row in data:
+            print(str(row[2]))
+            if not str(row[2]) in numeriu_list:
+                numeriu_list.append(str(row[2]))
+                cur.execute(insert_query, row)
+            else:
+                QMessageBox.critical(None, 'Klaida', f'Dokumentas su {str(row[2])} saskaitos numeriu jau yra.')
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def drop_saskaitos_table(conn_params):
+    conn = psycopg2.connect(**conn_params)
+    cur = conn.cursor()
+    drop_query = "DROP TABLE IF EXISTS sf_duomenys"
+    cur.execute(drop_query)
     conn.commit()
     cur.close()
     conn.close()
@@ -86,7 +110,7 @@ def atvaizduoti_saskaitas(conn_params):
     cur.execute(show_query)
     saskaitu_list = []
     for row in cur.fetchall():
-        saskaita = {"data": row[1], "serija": row[2], "numeris": row[3], "pardavejo_imone": row[4],
+        saskaita = {"data": row[3], "serija": row[1], "numeris": row[2], "pardavejo_imone": row[4],
                          "pardavejo_adresas": row[5], "pardavejo_kodas": row[6], "pardavejo_pvm_kodas": row[7],
                          "pirkejo_imone": row[8], "pirkejo_adresas": row[9], "pirkejo_kodas": row[10],
                          "pirkejo_pvm_kodas": row[11], "preke": row[12], "mat_vnt": row[13], "kiekis": row[14],

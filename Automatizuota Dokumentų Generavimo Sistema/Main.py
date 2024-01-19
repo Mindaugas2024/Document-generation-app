@@ -1,12 +1,12 @@
 import sys
-from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QLabel, QMainWindow, QAction, QComboBox,
+from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QProgressBar, QMainWindow, QAction, QComboBox,
                              QTableWidget, QVBoxLayout, QInputDialog, QFileDialog, QTableWidgetItem, QTextEdit,
                              QHBoxLayout, QCheckBox, QMessageBox)
 import shutil
 import os
 from docx import Document
 from database import (create_table_saskaitu_duomenys, create_table_sablonai, insert_data_sablonai, atvaizduoti_sablonus,
-                      insert_data_saskaitos, atvaizduoti_saskaitas)
+                      read_excel, atvaizduoti_saskaitas, insert_data_saskaitos, drop_saskaitos_table)
 from docx2pdf import convert
 
 # prisijungimai i duomenu baze
@@ -144,15 +144,15 @@ class Application(QMainWindow):
         except Exception as e:
             print(e)
 
-    def modifikuotiSablona(self, row):
+    def modifikuotiSablona(self, row_index):
         try:
             # neberodome saraso ekrane
             self.fileEdit = QTextEdit(self)
 
             # gauname indeksa mygtuko kuris buvo paspaustas ir su indeksu pasiemame sablono kelia kuri redaguosime
 
-            print(row)
-            self.modifikuojamas_failas = self.sablonu_list[row]["failo_kelias"]
+            print(row_index)
+            self.modifikuojamas_failas = self.sablonu_list[row_index]["failo_kelias"]
             print(self.modifikuojamas_failas)
 
             # pagal kelia atsidarome faila ir su for pasiemame ir atvaizduojame teksta kuri galesime koreguoti
@@ -164,22 +164,48 @@ class Application(QMainWindow):
                 tekstas += line
                 teksto_sarasas.append(line)
 
-            for table in dokumentas.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        window = cell.text + '\t'
-                        print(cell)
-                        tekstas += window
-                        teksto_sarasas.append(window)
-                    window = '\n'
-                    tekstas += window
-                    teksto_sarasas.append(window)
-                window = '\n'
-                tekstas += window
-                teksto_sarasas.append(window)
+            # for table in dokumentas.tables:
+            #     naujas_listas = []
+            #     for table_row in table.rows:
+            #
+            #         for cell in table_row.cells:
+            #             cell_tekstas = cell.text.strip() + '\t'
+            #             if cell_tekstas not in naujas_listas:
+            #
+            #                 tekstas += cell_tekstas + '\t'
+            #                 langelis = cell_tekstas + '\t'
+            #                 naujas_listas.append(cell)
+            #                 teksto_sarasas.append(langelis)
+            #         # window = [cell.text for cell in row.cells]
+            #             # window = cell.text + '\t'
+            #             # print(window)
+            #             # tekstas += window
+            #             # teksto_sarasas.append(window)
+            #         # window = '\n'
+            #         # print(window)
+            #         tekstas += '\n'
+            #         # teksto_sarasas.append(window)
+            #     # window = '\n'
+            #     # tekstas += window
+            #     # teksto_sarasas.append(window)
+            #
+            # print(teksto_sarasas)
+            # self.fileEdit.setPlainText(tekstas)
 
-            print(teksto_sarasas)
+            for table in dokumentas.tables:
+                previous_rows_texts = []
+                for table_row in table.rows:
+                    row_text = ''.join(cell.text.strip() for cell in table_row.cells)
+                    if row_text and row_text not in previous_rows_texts:
+                        for cell in table_row.cells:
+                            tekstas += cell.text.strip() + '\t'
+                        tekstas += '\n'
+                        previous_rows_texts.append(row_text)
+                    tekstas += '\n'
+                tekstas += '\n'
+
             self.fileEdit.setPlainText(tekstas)
+
 
             # buttonu layout
             button_layout = QHBoxLayout()
@@ -203,20 +229,24 @@ class Application(QMainWindow):
 
     def atnaujintiSablona(self):
         try:
+            print("veikia")
             # atnaujiname faila su naujais irasais, irasa fiksuojame pagal eilute
+            dokumentas = Document(self.modifikuojamas_failas)
+            for element in dokumentas.element.body:
+                dokumentas.element.body.remove(element)
             naujas_teksto_sarasas = []
-            dokumentas = Document()
             for eilute in self.fileEdit.toPlainText().split('\n'):
                 dokumentas.add_paragraph(eilute)
                 naujas_teksto_sarasas.append(eilute)
 
-            # dokumentas.save(self.modifikuojamas_failas)
-            # print(naujas_teksto_sarasas)
+            dokumentas.save(self.modifikuojamas_failas)
+            print(naujas_teksto_sarasas)
         except Exception as e:
             print(e)
 
     def saskaituSarasas(self):
         try:
+            self.sablonuSarasas()
             # toks pat veikimas kaip ir su sablonu sarasu. Isjungiame jeigu rodomas sablonu sarasas, sukuriam table
             # jeigu neturime ir is db pasiemame duomenis ju atvaizdavimui
             create_table_saskaitu_duomenys(db_params)
@@ -244,7 +274,11 @@ class Application(QMainWindow):
 
             button_layout = QHBoxLayout()
             pasirinkti_location_button = QPushButton('Ikelti duomenis')
+            prideti_eilute_button = QPushButton('Ivesti duomenis')
             atnaujinti_button = QPushButton("Atnaujinti", self)
+            # formation_bar = QProgressBar()
+            # formation_bar.setFixedWidth(305)
+            # formation_bar.setValue(0)
             self.pasirinkti_sablona_button = QComboBox(self)
             self.pasirinkti_sablona_button.addItem("Pasirinkti Šabloną")
             for sablonas in self.sablonu_list:
@@ -252,13 +286,17 @@ class Application(QMainWindow):
                     self.pasirinkti_sablona_button.addItem(sablonas["pavadinimas"])
 
             formuoti_button = QPushButton("Formuoti Dokumentus", self)
-            pasirinkti_location_button.clicked.connect(self.dokumento_pasirinkimas)
 
+            pasirinkti_location_button.clicked.connect(self.dokumento_pasirinkimas)
+            prideti_eilute_button.clicked.connect(self.nauja_saskaitos_eilute)
             formuoti_button.clicked.connect(self.dokumentu_formavimas)
+            atnaujinti_button.clicked.connect(self.atnaujinti_saskaitu_sarasa)
             button_layout.addWidget(pasirinkti_location_button)
+            button_layout.addWidget(prideti_eilute_button)
             button_layout.addWidget(atnaujinti_button)
             button_layout.addWidget(self.pasirinkti_sablona_button)
             button_layout.addWidget(formuoti_button)
+            # button_layout.addWidget(formation_bar)
 
             saskaitu_layout = QVBoxLayout()
             saskaitu_layout.addLayout(button_layout)
@@ -275,12 +313,45 @@ class Application(QMainWindow):
             # pasirenkame dokumenta is kompiuterio (.xlsx) kurio duomenis bus atvaizduojame saskaitu sarase
             failo_kelias, _ = QFileDialog.getOpenFileName(self, 'Pasirinkite Failą', '', 'Visi failai (*)')
             if failo_kelias:
-                insert_data_saskaitos(failo_kelias, db_params)
+                read_excel(failo_kelias, db_params)
+            self.saskaituSarasas()
         except Exception as e:
+            print(e)
+
+    def nauja_saskaitos_eilute(self):
+        try:
+            # sis metodas sukuria apacioje tuscia nauja eilute informacijai ivesti
+            check_box = QCheckBox()
+            paskutine_eilute = self.saskaitu_sarasas.rowCount()
+            self.saskaitu_sarasas.insertRow(paskutine_eilute)
+            self.saskaitu_sarasas.setCellWidget((paskutine_eilute), 0, check_box)
+        except Exception as e:
+            print(e)
+
+    def atnaujinti_saskaitu_sarasa(self):
+        try:
+            # atnaujinant sarasa, susirenkame visus matomus duomenis i sarasa, dropinam database ir
+            # sukuriam nauja ir ikeliame naujus duomenis
+            data = []
+            for row in range(self.saskaitu_sarasas.rowCount()):
+                eilutes_data = []
+                for collum in range(1, self.saskaitu_sarasas.columnCount()):
+                    langelis = self.saskaitu_sarasas.item(row, collum)
+                    eilutes_data.append(langelis.text())
+                data.append(eilutes_data)
+            drop_saskaitos_table(db_params)
+            create_table_saskaitu_duomenys(db_params)
+            insert_data_saskaitos(data, db_params)
+            # print(data)
+            self.saskaituSarasas()
+        except Exception as e:
+            # jeigu kuris nors langelis tuscias gausime klaida
+            QMessageBox.critical(self, 'Klaida', 'Ne visi langeliai uzpildyti.')
             print(e)
 
     def dokumentu_formavimas(self):
         try:
+            # prasome vartotojo pasirinkti formavimo
             visa_pasirinkta_info = []
             formavimo_tipai = ["docx", "pdf"]
             # print(self.pasirinkti_sablona_button.currentText())
@@ -340,7 +411,7 @@ class Application(QMainWindow):
                 dokumentas.save(created_filename)
                 if tipas == "pdf":
                     self.pdf_suformavimas(created_filename)
-                    print("vykdom pdf")
+                    # print("vykdom pdf")
 
         except Exception as e:
             print(e)
