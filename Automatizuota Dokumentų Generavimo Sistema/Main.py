@@ -351,7 +351,7 @@ class Application(QMainWindow):
 
     def dokumentu_formavimas(self):
         try:
-            # prasome vartotojo pasirinkti formavimo
+            # prasome vartotojo pasirinkti formavimo tipa
             visa_pasirinkta_info = []
             formavimo_tipai = ["docx", "pdf"]
             # print(self.pasirinkti_sablona_button.currentText())
@@ -364,6 +364,7 @@ class Application(QMainWindow):
                 checked_boxes = [row for row in range(self.saskaitu_sarasas.rowCount())
                                  if self.saskaitu_sarasas.cellWidget(row, 0).isChecked()]
 
+                # graziname antgal i sarasa jeigu nera pazymetu saskaitu
                 if not checked_boxes:
                     QMessageBox.warning(self, 'Klaida', 'Nepasirinktos sąskaitos.')
                     return
@@ -383,6 +384,7 @@ class Application(QMainWindow):
 
     def docx_suformavimas(self, failo_kelias, visa_pasirinkta_info, tipas):
         try:
+            # nurodome kur issaugome failus, ir placeholderius kuriu ieskos
             issaugojimas = ('C:/Users/minde/Documents/GitHub/PYTHON/Automatizuota Dokumentų Generavimo Sistema'
                             '/Saskaitos docx/')
             placeholderis = ["{data}", "{serija}", "{numeris}", "{pardavejo imone}", "{pardavejo adresas}",
@@ -418,6 +420,7 @@ class Application(QMainWindow):
 
     def pdf_suformavimas(self, directory):
         try:
+            # pdf failus suformuojame is docx failu
             input_directory = directory
             output_directory = ('C:/Users/minde/Documents/GitHub/PYTHON/Automatizuota Dokumentų Generavimo Sistema'
                                 '/saskaitos PDF/')
